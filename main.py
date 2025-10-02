@@ -6,6 +6,8 @@ from torchvision.transforms import ToTensor
 import vae_model
 import matplotlib.pyplot as plt
 import random
+import numpy as np
+from sklearn.manifold import TSNE
 
 BATCH_SIZE = 32
 LR_RATE = 1e-3
@@ -61,6 +63,27 @@ def train_model():
     torch.save(model.state_dict(), 'model_weights.pth')
     print("Done!")
 
+def visualize_latent_tsne(model, device, dataset, n_samples=3000):
+    model.eval()
+    z_list, labels = [], []
+    
+    with torch.no_grad():
+        for i in range(n_samples):
+            img, label = dataset[i]
+            mu, _, _ = model(img.to(device).view(1, IMG_DIM))
+            z_list.append(mu.cpu().numpy().flatten())
+            labels.append(label)
+    
+    print("Running t-SNE...")
+    tsne = TSNE(n_components=2, random_state=42)
+    z_2d = tsne.fit_transform(np.array(z_list))
+    
+    plt.figure(figsize=(10, 8))
+    scatter = plt.scatter(z_2d[:, 0], z_2d[:, 1], c=labels, cmap='tab10', alpha=0.6, s=10)
+    plt.colorbar(scatter, ticks=range(10))
+    plt.title(f'VAE Latent Space (t-SNE from {Z_DIM}D)')
+    plt.show()
+
 
 def show_reconstruction(model, device, img):
     model.eval()  # set to eval mode
@@ -90,10 +113,13 @@ def show_reconstruction(model, device, img):
     plt.show()
 
 
-train_model()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = vae_model.VaeModel(IMG_DIM, HIDDEN_DIM, Z_DIM).to(device)
 model.load_state_dict(torch.load('model_weights.pth', weights_only=True, map_location=device))
+
+
+visualize_latent_tsne(model, device, mnist_train_ds)
+
 sample_img, _ = mnist_train_ds[random.randint(0, len(mnist_train_ds) - 1)]  # tuple (image, label)
 
 show_reconstruction(model, device, sample_img)
