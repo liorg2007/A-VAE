@@ -25,6 +25,8 @@ mnist_train_ds = torchvision.datasets.MNIST(
         transform=ToTensor()
     )
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 def train_loop(dataloader: DataLoader, model: vae_model.VaeModel, optimizer: torch.optim.Adam, device, epoch):
     size = len(dataloader.dataset)
     model.train()
@@ -85,6 +87,29 @@ def visualize_latent_tsne(model, device, dataset, n_samples=3000):
     plt.show()
 
 
+def generate_random_number(model, device):
+    model.eval()  # set to eval mode
+
+    # Ensure image is 4D: (1, 1, 28, 28)
+    z = torch.randn(1, Z_DIM).to(device)
+
+    with torch.no_grad():
+        generated = model.decode(z)  # flatten to (1, 784)
+        generated = generated.view(-1, 1, 28, 28)  # reshape back to image
+
+    # Convert to CPU numpy for plotting
+    generated_img = generated.view(28, 28).cpu().numpy()
+
+    # Plot side by side
+    fig, axes = plt.subplots(1, 1, figsize=(3, 3))
+
+    axes.imshow(generated_img, cmap="gray")
+    axes.set_title("Generated")
+    axes.axis("off")
+
+    plt.show()
+
+
 def show_reconstruction(model, device, img):
     model.eval()  # set to eval mode
 
@@ -113,13 +138,42 @@ def show_reconstruction(model, device, img):
     plt.show()
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = vae_model.VaeModel(IMG_DIM, HIDDEN_DIM, Z_DIM).to(device)
-model.load_state_dict(torch.load('model_weights.pth', weights_only=True, map_location=device))
+def main():
+    model = vae_model.VaeModel(IMG_DIM, HIDDEN_DIM, Z_DIM).to(device)
+    
+    while True:
+        print("\nChoose an action:")
+        print("1: Train and load model")
+        print("2: Only load model")
+        print("3: Perform reconstruction on a random image")
+        print("4: Generate a random number (image)")
+        print("5: Visualize latent space (t-SNE)")
+        print("6: Exit")
 
+        choice = input("Enter choice (1/2/3/4/5/6): ").strip()
 
-visualize_latent_tsne(model, device, mnist_train_ds)
+        if choice == "1":
+            print("Training model...")
+            train_model()
+            model.load_state_dict(torch.load('model_weights.pth', map_location=device))
+            print("Model loaded successfully.")
+        elif choice == "2":
+            file = input("Enter model weight file: ") or "model_weights.pth"
+            model.load_state_dict(torch.load(file, map_location=device))
+            print("Model loaded successfully.")
+        elif choice == "3":
+            idx = random.randint(0, len(mnist_train_ds) - 1)
+            sample_img, _ = mnist_train_ds[idx]
+            show_reconstruction(model, device, sample_img)
+        elif choice == "4":
+            generate_random_number(model, device)
+        elif choice == "5":
+            visualize_latent_tsne(model, device, mnist_train_ds, n_samples=3000)
+        elif choice == "6":
+            print("Exiting...")
+            break
+        else:
+            print("Invalid choice. Try again.")
 
-sample_img, _ = mnist_train_ds[random.randint(0, len(mnist_train_ds) - 1)]  # tuple (image, label)
-
-show_reconstruction(model, device, sample_img)
+if __name__ == "__main__":
+    main()
